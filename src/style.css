@@ -178,11 +178,11 @@ h1, h2, h3, p { margin: 0; }
 .swatch[data-color="#ffffff"][aria-pressed="true"] { border-color: #817a6d; }
 #weight-control { border: 0; padding: 0; margin: 19px 0 0; min-width: 0; }
 .callout-field { border: 0; padding: 0; margin: 17px 0 0; min-width: 0; }
-.callout-styles { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 5px; margin-top: 9px; }
-.callout-styles button { display: grid; justify-items: center; gap: 5px; min-width: 0; padding: 7px 3px 6px; border: 1px solid #e5dfd4; border-radius: 6px; background: var(--white); color: #504a3f; font-size: .75rem; font-weight: 620; }
+.callout-styles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-top: 9px; }
+.callout-styles button { display: flex; align-items: center; gap: 5px; min-width: 0; min-height: 38px; padding: 5px; border: 1px solid #e5dfd4; border-radius: 6px; background: var(--white); color: #504a3f; font-size: .75rem; font-weight: 620; }
 .callout-styles button:hover:not(:disabled) { background: #f0ebe2; }
 .callout-styles button[aria-pressed="true"], .callout-styles button[aria-pressed="true"]:hover { border-color: #e9baab; background: var(--accent-tint); color: #983624; }
-.callout-diagram { position: relative; display: block; width: 34px; height: 21px; }
+.callout-diagram { position: relative; display: block; flex: 0 0 34px; width: 34px; height: 21px; }
 .callout-diagram::before, .callout-diagram::after { content: ""; position: absolute; z-index: 1; border: 1px solid currentColor; border-radius: 2px; background: var(--white); }
 .callout-diagram::before { width: 11px; height: 9px; left: 1px; top: 7px; }
 .callout-diagram::after { width: 16px; height: 15px; right: 1px; top: 3px; }
@@ -190,6 +190,9 @@ h1, h2, h3, p { margin: 0; }
 [data-callout-variant="spotlight"] .callout-diagram { background: #625a5140; border-radius: 3px; }
 [data-callout-variant="spotlight"] .callout-diagram i { border-top-style: dashed; }
 [data-callout-variant="shaded"] .callout-diagram i { top: 3px; height: 15px; border: 0; background: currentColor; opacity: .28; clip-path: polygon(0 30%, 100% 0, 100% 100%, 0 72%); }
+[data-callout-variant="3d"] .callout-diagram::before { top: 11px; width: 9px; height: 8px; }
+[data-callout-variant="3d"] .callout-diagram::after { top: 1px; width: 16px; height: 15px; }
+[data-callout-variant="3d"] .callout-diagram i { top: 1px; height: 18px; border: 0; background: linear-gradient(90deg, transparent, currentColor); opacity: .64; clip-path: polygon(3% 61%, 50% 0, 97% 0, 97% 83%, 27% 100%, 3% 100%); }
 #auto-place-inset { margin-top: 13px; width: 100%; min-height: 34px; }
 .weight-buttons { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 10px; }
 .weight-buttons button { flex: 1 0 auto; border: 1px solid #e5dfd4; min-height: 34px; padding: 0 6px; border-radius: 6px; background: var(--white); color: #504a3f; font-size: .8125rem; font-weight: 620; }
@@ -260,6 +263,7 @@ dialog textarea { display: block; resize: vertical; min-height: 90px; }
   .tool-button { padding-inline: 8px; }
 }
 @media (max-width: 730px) {
+  .callout-styles button { display: grid; justify-items: center; gap: 3px; padding-inline: 2px; }
   .tool-button span { display: none; }
   .tool-button { min-width: 36px; }
   .editor { grid-template-columns: minmax(0, 1fr) 228px; }

@@ -4,6 +4,7 @@ export const calloutVariants = {
   connected: 'Connected',
   spotlight: 'Spotlight',
   shaded: 'Shaded',
+  '3d': '3D',
 }
 export const magnifications = [1.5, 2, 3, 4] as const
 
@@ -120,17 +121,91 @@ function facingEdges(source: Rectangle, inset: Rectangle): [Point, Point, Point,
     { x: inset.x, y: b }, { x: inset.x + inset.width, y: b }]
 }
 
+function corners({ x, y, width, height }: Rectangle) {
+  return [{ x, y }, { x: x + width, y }, { x: x + width, y: y + height }, { x, y: y + height }]
+}
+
+function midpoint(a: Point, b: Point): Point {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+}
+
+function convexHull(points: Point[]) {
+  const ordered = points.toSorted((a, b) => a.x - b.x || a.y - b.y)
+  const trace = (vertices: Point[]) => {
+    const edge: Point[] = []
+    for (const point of vertices) {
+      while (edge.length >= 2) {
+        const a = edge[edge.length - 2]
+        const b = edge[edge.length - 1]
+        const turn = (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
+        if (turn > 0) break
+        edge.pop()
+      }
+      edge.push(point)
+    }
+    return edge.slice(0, -1)
+  }
+  return [...trace(ordered), ...trace(ordered.reverse())]
+}
+
+function drawDepthConnector(ctx: CanvasRenderingContext2D, source: Rectangle, inset: Rectangle, color: string) {
+  const start = corners(source)
+  const end = corners(inset)
+  const hull = convexHull([...start, ...end])
+  const [a, b, c, d] = facingEdges(source, inset)
+  const from = midpoint(a, b)
+  const to = midpoint(c, d)
+  const fade = () => ctx.createLinearGradient(from.x, from.y, to.x, to.y)
+  const face = fade()
+  face.addColorStop(0, `${color}09`)
+  face.addColorStop(1, `${color}4d`)
+  const edges = fade()
+  edges.addColorStop(0, `${color}70`)
+  edges.addColorStop(1, `${color}e6`)
+
+  ctx.save()
+  // Cut the connector around both crops so the screenshot pixels stay legible.
+  const left = Math.min(source.x, inset.x)
+  const top = Math.min(source.y, inset.y)
+  const right = Math.max(source.x + source.width, inset.x + inset.width)
+  const bottom = Math.max(source.y + source.height, inset.y + inset.height)
+  const padding = ctx.lineWidth
+  ctx.beginPath()
+  ctx.rect(left - padding, top - padding, right - left + padding * 2, bottom - top + padding * 2)
+  ctx.rect(source.x, source.y, source.width, source.height)
+  ctx.rect(inset.x, inset.y, inset.width, inset.height)
+  ctx.clip('evenodd')
+
+  ctx.beginPath()
+  ctx.moveTo(hull[0].x, hull[0].y)
+  for (const point of hull.slice(1)) ctx.lineTo(point.x, point.y)
+  ctx.closePath()
+  ctx.fillStyle = face
+  ctx.fill()
+
+  ctx.beginPath()
+  for (const [index, point] of start.entries()) {
+    ctx.moveTo(point.x, point.y)
+    ctx.lineTo(end[index].x, end[index].y)
+  }
+  ctx.strokeStyle = edges
+  ctx.stroke()
+  ctx.restore()
+}
+
 function drawCallout(ctx: CanvasRenderingContext2D, image: HTMLImageElement, { mark, source, inset }: CalloutDrawing) {
   const { variant } = mark.callout
   const { color, weight } = mark.style
-  const [a, b, c, d] = facingEdges(source, inset)
   ctx.save()
   ctx.strokeStyle = color
   ctx.lineWidth = weight
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
 
-  if (variant === 'shaded') {
+  if (variant === '3d') {
+    drawDepthConnector(ctx, source, inset, color)
+  } else if (variant === 'shaded') {
+    const [a, b, c, d] = facingEdges(source, inset)
     ctx.fillStyle = color
     ctx.globalAlpha = .24
     ctx.beginPath()
@@ -144,10 +219,13 @@ function drawCallout(ctx: CanvasRenderingContext2D, image: HTMLImageElement, { m
     ctx.fillRect(source.x, source.y, source.width, source.height)
     ctx.globalAlpha = 1
   } else {
+    const [a, b, c, d] = facingEdges(source, inset)
+    const from = midpoint(a, b)
+    const to = midpoint(c, d)
     if (variant === 'spotlight') ctx.setLineDash([weight * 3, weight * 2])
     ctx.beginPath()
-    ctx.moveTo((a.x + b.x) / 2, (a.y + b.y) / 2)
-    ctx.lineTo((c.x + d.x) / 2, (c.y + d.y) / 2)
+    ctx.moveTo(from.x, from.y)
+    ctx.lineTo(to.x, to.y)
     ctx.stroke()
     ctx.setLineDash([])
   }

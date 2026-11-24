@@ -1,4 +1,5 @@
-import type { Mark, Tool } from './annotations'
+import { toolNames, type Mark } from './annotations'
+import { calloutVariants, magnifications } from './callouts'
 
 export type Project = {
   name: string
@@ -8,9 +9,9 @@ export type Project = {
 }
 
 const projectFormat = 'marklet'
-const projectVersion = 1
+const legacyVersion = 1
+const calloutVersion = 2
 const dataImage = /^data:image\/[a-z0-9.+-]+;base64,/i
-const markTools = new Set<Tool>(['box', 'highlight', 'arrow', 'text'])
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -24,21 +25,30 @@ function validPoint(value: unknown) {
   return record(value) && bounded(value.x, -1e7, 1e7) && bounded(value.y, -1e7, 1e7)
 }
 
+function validCallout(value: unknown) {
+  return record(value)
+    && typeof value.variant === 'string' && Object.hasOwn(calloutVariants, value.variant)
+    && magnifications.some(zoom => zoom === value.magnification)
+    && (value.position === undefined || (record(value.position)
+      && bounded(value.position.x, 0, 1e7) && bounded(value.position.y, 0, 1e7)))
+}
+
 function validMark(value: unknown): value is Mark {
   return record(value)
     && typeof value.id === 'string' && value.id.length > 0
-    && markTools.has(value.type as Tool)
+    && typeof value.type === 'string' && value.type !== 'select' && Object.hasOwn(toolNames, value.type)
     && typeof value.text === 'string' && value.text.length <= 1500
     && typeof value.label === 'string'
     && validPoint(value.from) && validPoint(value.to)
     && record(value.style)
     && typeof value.style.color === 'string' && /^#[0-9a-f]{6}$/i.test(value.style.color)
     && bounded(value.style.weight, 1, 200) && bounded(value.style.opacity, 0, 100)
+    && (value.type !== 'callout' || validCallout(value.callout))
 }
 
 export function readProject(json: string): Project {
   const parsed: unknown = JSON.parse(json)
-  if (!record(parsed) || parsed.format !== projectFormat || parsed.version !== projectVersion
+  if (!record(parsed) || parsed.format !== projectFormat || (parsed.version !== legacyVersion && parsed.version !== calloutVersion)
     || typeof parsed.name !== 'string' || typeof parsed.imageName !== 'string'
     || typeof parsed.imageSrc !== 'string' || !dataImage.test(parsed.imageSrc)
     || !Array.isArray(parsed.marks) || !parsed.marks.every(validMark)
@@ -49,7 +59,8 @@ export function readProject(json: string): Project {
 }
 
 export function projectBlob(project: Project) {
-  return new Blob([JSON.stringify({ format: projectFormat, version: projectVersion, ...project })], { type: 'application/json' })
+  const version = project.marks.some(mark => mark.type === 'callout') ? calloutVersion : legacyVersion
+  return new Blob([JSON.stringify({ format: projectFormat, version, ...project })], { type: 'application/json' })
 }
 
 export function asDataUrl(blob: Blob): Promise<string> {

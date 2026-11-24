@@ -1,7 +1,8 @@
 import { palette, toolNames, type Tool } from './annotations'
+import { calloutVariants, magnifications } from './callouts'
 import { icon, toolIcons } from './icons'
 
-export const shortcutByTool: Record<Tool, string> = { select: 'V', box: 'R', highlight: 'H', arrow: 'A', text: 'T' }
+export const shortcutByTool: Record<Tool, string> = { select: 'V', box: 'R', highlight: 'H', arrow: 'A', text: 'T', callout: 'C' }
 
 const tools = (Object.keys(toolNames) as Tool[]).map(tool => `
   <button class="tool-button" type="button" data-tool="${tool}" title="${toolNames[tool]} (${shortcutByTool[tool]})" aria-label="${toolNames[tool]} (${shortcutByTool[tool]})" aria-pressed="${tool === 'box'}">
@@ -12,6 +13,12 @@ const swatches = palette.map(({ name, hex }) => `
   <button type="button" class="swatch" style="--swatch: ${hex}" data-color="${hex}" title="${name}" aria-label="${name}" aria-pressed="false"><span></span></button>`).join('')
 
 const shortcuts = (Object.keys(toolNames) as Tool[]).map(tool => `<div><span>${toolNames[tool]}</span><kbd>${shortcutByTool[tool]}</kbd></div>`).join('')
+
+const calloutStyles = Object.entries(calloutVariants).map(([key, label]) => `
+  <button type="button" data-callout-variant="${key}" aria-pressed="false">
+    <span class="callout-diagram" aria-hidden="true"><i></i></span><span>${label}</span>
+  </button>`).join('')
+const calloutZooms = magnifications.map(value => `<button type="button" data-callout-zoom="${value}" aria-pressed="false">${value}×</button>`).join('')
 
 export const editorMarkup = `
   <header class="app-header">
@@ -77,11 +84,22 @@ export const editorMarkup = `
         <div id="style-fields">
           <h3 id="color-label">Color</h3>
           <div class="palette" role="group" aria-labelledby="color-label">${swatches}</div>
+          <div id="callout-controls" hidden>
+            <fieldset class="callout-field">
+              <legend>Callout style</legend>
+              <div class="callout-styles">${calloutStyles}</div>
+            </fieldset>
+            <fieldset class="callout-field">
+              <legend>Magnification</legend>
+              <div class="weight-buttons">${calloutZooms}</div>
+            </fieldset>
+            <button class="button button-outline" id="auto-place-inset" type="button" hidden>${icon('scan')}<span>Auto-place inset</span></button>
+          </div>
           <fieldset id="weight-control">
             <legend id="weight-label">Stroke width</legend>
             <div class="weight-buttons" id="weights"></div>
           </fieldset>
-          <div class="opacity-control">
+          <div class="opacity-control" id="opacity-control">
             <div><label for="opacity">Opacity</label><output id="opacity-value" for="opacity">100%</output></div>
             <input aria-label="Opacity" type="range" min="0" max="100" step="1" id="opacity">
           </div>

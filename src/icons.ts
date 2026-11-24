@@ -21,13 +21,14 @@ import type from 'lucide-static/icons/type.svg?raw'
 import undo from 'lucide-static/icons/undo-2.svg?raw'
 import upload from 'lucide-static/icons/upload.svg?raw'
 import x from 'lucide-static/icons/x.svg?raw'
+import zoom from 'lucide-static/icons/zoom-in.svg?raw'
 
-const icons = { arrow, check, chevron, circleHelp, download, fileImage, folder, highlighter, layers, mouse, minus, pen, plus, redo, save, scan, sliders, square, trash, type, undo, upload, x }
+const icons = { arrow, check, chevron, circleHelp, download, fileImage, folder, highlighter, layers, mouse, minus, pen, plus, redo, save, scan, sliders, square, trash, type, undo, upload, x, zoom }
 
 export function icon(name: keyof typeof icons) {
   return icons[name].replace('<svg', '<svg aria-hidden="true" focusable="false"')
 }
 
 export const toolIcons = {
-  select: 'mouse', box: 'square', highlight: 'highlighter', arrow: 'arrow', text: 'type',
+  select: 'mouse', box: 'square', highlight: 'highlighter', arrow: 'arrow', text: 'type', callout: 'zoom',
 } as const

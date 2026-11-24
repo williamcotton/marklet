@@ -1,7 +1,7 @@
 import '@fontsource-variable/dm-sans'
-import '@fontsource/instrument-serif/400.css'
 import './style.css'
-import { defaultStyles, drawMark, drawSelection, hitsMark, moveMark, resizeHandles, resizeMark, toolNames, type Mark, type MarkTool, type Point, type ResizeHandle, type Style, type Tool } from './annotations'
+import { contains, defaultStyles, drawMark, drawSelection, hitsMark, moveMark, resizeHandles, resizeMark, toolNames, type Mark, type MarkTool, type Point, type ResizeHandle, type Style, type Tool } from './annotations'
+import { calloutSource, clampPoint, compositionSize, defaultCallout, drawComposition, layoutCallout, magnifications, moveCalloutSource, validCrop, type CalloutOptions } from './callouts'
 import { createDemo } from './demo'
 import { icon, toolIcons } from './icons'
 import { asDataUrl, download, filenameFor, loadImage, projectBlob, readProject, toImageBlob, type Project } from './project'
@@ -28,6 +28,8 @@ const exportDialog = element<HTMLDialogElement>('export-dialog')
 const layerList = element<HTMLUListElement>('layers')
 const toolButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-tool]')]
 const swatchButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-color]')]
+const variantButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-callout-variant]')]
+const magnificationButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-callout-zoom]')]
 const uploadButtons = ['upload-image', 'empty-upload'].map(id => element<HTMLButtonElement>(id))
 
 const past: Project[] = []
@@ -37,7 +39,9 @@ let project: Project | undefined
 let savedProject: Project | undefined
 let sampleSource: string | undefined
 let image: HTMLImageElement | undefined
+let outputSize: Point = { x: 0, y: 0 }
 let activeTool: Tool = 'box'
+let nextCallout = { ...defaultCallout }
 let selectedId: string | undefined
 let zoom: number | undefined
 let displayScale = 1
@@ -51,7 +55,7 @@ type Gesture = {
   end: Point
   original: Mark
   mark: Mark
-  mode: 'draw' | 'move' | ResizeHandle
+  mode: 'draw' | 'move' | 'inset' | ResizeHandle
 }
 let gesture: Gesture | undefined
 let textEdit: { point: Point; mark?: Mark } | undefined
@@ -82,10 +86,10 @@ function resizeCanvas() {
   if (!image || !area.clientWidth || !area.clientHeight) return
   const gutter = area.clientWidth < 500 ? 30 : 96
   const verticalGutter = area.clientHeight < 400 ? 32 : 64
-  const fitScale = Math.min(1, Math.max(1, area.clientWidth - gutter) / image.naturalWidth, Math.max(1, area.clientHeight - verticalGutter) / image.naturalHeight)
+  const fitScale = Math.min(1, Math.max(1, area.clientWidth - gutter) / outputSize.x, Math.max(1, area.clientHeight - verticalGutter) / outputSize.y)
   displayScale = zoom ?? fitScale
-  const width = Math.max(1, Math.round(image.naturalWidth * displayScale))
-  const height = Math.max(1, Math.round(image.naturalHeight * displayScale))
+  const width = Math.max(1, Math.round(outputSize.x * displayScale))
+  const height = Math.max(1, Math.round(outputSize.y * displayScale))
   shell.style.width = `${width}px`
   shell.style.height = `${height}px`
   stage.style.minWidth = `${width + gutter}px`
@@ -105,16 +109,28 @@ function paint() {
   if (!image || !project) return
   ctx.resetTransform()
   ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.scale(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight)
-  ctx.drawImage(image, 0, 0)
+  ctx.scale(canvas.width / outputSize.x, canvas.height / outputSize.y)
+  const marks = gesture && gesture.mode !== 'draw'
+    ? project.marks.map(mark => mark.id === gesture?.mark.id ? gesture.mark : mark) : project.marks
+  drawComposition(ctx, image, marks, outputSize, false)
 
-  for (const mark of project.marks) {
-    drawMark(ctx, gesture?.mark.id === mark.id ? gesture.mark : mark)
+  if (gesture?.mode === 'draw') {
+    if (gesture.mark.type === 'callout') {
+      const { x, y, width, height } = calloutSource(gesture.mark, imageSize())
+      ctx.save()
+      ctx.strokeStyle = gesture.mark.style.color
+      ctx.lineWidth = 2 / displayScale
+      ctx.setLineDash([6 / displayScale, 4 / displayScale])
+      ctx.strokeRect(x, y, width, height)
+      ctx.restore()
+    } else drawMark(ctx, gesture.mark)
   }
-  if (gesture?.mode === 'draw') drawMark(ctx, gesture.mark)
 
   const selection = gesture && gesture.mode !== 'draw' ? gesture.mark : selectedMark()
-  if (selection) drawSelection(ctx, selection, displayScale, imageSize())
+  if (selection) {
+    const inset = selection.type === 'callout' ? layoutCallout(selection, imageSize()).inset : undefined
+    drawSelection(ctx, selection, displayScale, selection.type === 'callout' ? imageSize() : outputSize, inset)
+  }
 }
 
 function setDisabled(ids: string[], disabled: boolean) {
@@ -137,7 +153,7 @@ function renderHeader() {
   projectName.disabled = !project
   element('image-name').textContent = project?.imageName ?? 'No image loaded'
   element('sample-badge').hidden = !project || project.imageSrc !== sampleSource
-  element('image-size').textContent = image ? `${image.naturalWidth} × ${image.naturalHeight} px` : '—'
+  element('image-size').textContent = image ? `${outputSize.x} × ${outputSize.y} px` : '—'
   element('document-state').textContent = project
     ? project !== savedProject ? 'Unsaved changes' : 'Saved'
     : loading ? 'Opening file…' : 'No project'
@@ -162,9 +178,11 @@ function renderStyle() {
   element('style-empty').hidden = !!current
   element('style-context').hidden = !current
   const editHint = element('annotation-edit-hint')
-  editHint.hidden = !selection
-  if (selection) {
-    editHint.textContent = selection.type === 'arrow' ? 'Drag to move, or drag an endpoint to adjust.'
+  editHint.hidden = !selection && activeTool !== 'callout'
+  if (!selection) editHint.textContent = 'Draw a box around the area to magnify.'
+  else {
+    editHint.textContent = selection.type === 'callout' ? 'Drag either box to move it. Resize the source with its corner handles.'
+      : selection.type === 'arrow' ? 'Drag to move, or drag an endpoint to adjust.'
       : selection.type === 'text' ? 'Drag to move.'
       : 'Drag to move, or drag a corner to resize.'
   }
@@ -176,7 +194,20 @@ function renderStyle() {
     button.setAttribute('aria-pressed', String(button.dataset.color === current.style.color))
     button.disabled = !project
   }
-  element('weight-control').hidden = current.type === 'highlight'
+  const callout = selection?.type === 'callout' ? selection.callout : nextCallout
+  element('callout-controls').hidden = current.type !== 'callout'
+  element('auto-place-inset').hidden = selection?.type !== 'callout'
+  element<HTMLButtonElement>('auto-place-inset').disabled = !callout.position
+  for (const button of variantButtons) {
+    button.disabled = !project
+    button.setAttribute('aria-pressed', String(button.dataset.calloutVariant === callout.variant))
+  }
+  for (const button of magnificationButtons) {
+    button.disabled = !project
+    button.setAttribute('aria-pressed', String(Number(button.dataset.calloutZoom) === callout.magnification))
+  }
+  element('weight-control').hidden = current.type === 'highlight' || current.type === 'callout'
+  element('opacity-control').hidden = current.type === 'callout'
   element('weight-label').textContent = current.type === 'text' ? 'Text size' : 'Stroke width'
   const weights = current.type === 'text' ? [16, 24, 32, 48] : [2, 4, 6, 8]
   if (!weights.includes(current.style.weight)) weights.push(current.style.weight)
@@ -285,11 +316,15 @@ function renderLayers() {
   })
 }
 
-function update() {
+function update(forceResize = false) {
+  const size = image && project ? compositionSize(project.marks, imageSize()) : outputSize
+  const resized = size.x !== outputSize.x || size.y !== outputSize.y
+  outputSize = size
   renderHeader()
   renderStyle()
   renderLayers()
-  paint()
+  if (resized || forceResize) resizeCanvas()
+  else paint()
 }
 
 function commit(next: Project) {
@@ -301,7 +336,7 @@ function commit(next: Project) {
   update()
 }
 
-function patchMark(id: string, changes: Partial<Pick<Mark, 'label' | 'text' | 'style' | 'from' | 'to'>>) {
+function patchMark(id: string, changes: Partial<Pick<Mark, 'label' | 'text' | 'style' | 'from' | 'to'>> & { callout?: CalloutOptions }) {
   if (!project?.marks.some(mark => mark.id === id)) return
   commit({ ...project, marks: project.marks.map(mark => mark.id === id ? { ...mark, ...changes } : mark) })
 }
@@ -360,7 +395,21 @@ function changeStyle(properties: Partial<Style>) {
 }
 
 function makeMark(type: MarkTool, from: Point, to: Point, text = ''): Mark {
-  return { type, from, to, style: { ...styles[type] }, text, id: crypto.randomUUID(), label: '' }
+  const base = { from, to, style: { ...styles[type] }, text, id: crypto.randomUUID(), label: '' }
+  return type === 'callout' ? { ...base, type, callout: { ...nextCallout } } : { ...base, type }
+}
+
+function changeCallout(properties: Partial<CalloutOptions>) {
+  const mark = selectedMark()
+  if (mark?.type === 'callout') {
+    const callout = { ...mark.callout, ...properties }
+    if (Object.keys(properties).some(key => callout[key as keyof CalloutOptions] !== mark.callout[key as keyof CalloutOptions])) {
+      patchMark(mark.id, { callout })
+    }
+  } else {
+    nextCallout = { ...nextCallout, ...properties }
+    renderStyle()
+  }
 }
 
 function rename() {
@@ -380,11 +429,10 @@ function installProject(next: Project, nextImage: HTMLImageElement) {
   past.length = 0
   future.length = 0
   selectedId = undefined
-  activeTool = 'box'
+  activeTool = next.marks.length ? 'box' : 'callout'
   gesture = undefined
   zoom = undefined
-  update()
-  resizeCanvas()
+  update(true)
   area.scrollTo(0, 0)
 }
 
@@ -430,6 +478,7 @@ async function openExample() {
     if (request !== openRequest) return
     sampleSource = example.imageSrc
     installProject(example, decoded)
+    select(example.marks[0]?.id)
   } catch {
     if (request !== openRequest) return
     element('empty-message').textContent = 'Drop an image or project here'
@@ -450,7 +499,7 @@ function saveProject() {
 
 function openExport() {
   if (!image) return
-  element('export-size').textContent = `${image.naturalWidth} × ${image.naturalHeight} px · Includes all annotations`
+  element('export-size').textContent = `${outputSize.x} × ${outputSize.y} px · Includes all annotations`
   exportDialog.showModal()
 }
 
@@ -460,25 +509,20 @@ async function exportImage(event: Event) {
   const button = element<HTMLButtonElement>('export-submit')
   const type = element<HTMLSelectElement>('export-format').value
   const exportCanvas = document.createElement('canvas')
-  exportCanvas.width = image.naturalWidth
-  exportCanvas.height = image.naturalHeight
+  exportCanvas.width = outputSize.x
+  exportCanvas.height = outputSize.y
   button.disabled = true
   try {
     const exportContext = exportCanvas.getContext('2d')
     if (!exportContext) throw new Error('Image exceeds this browser’s canvas limits.')
-    if (type === 'image/jpeg') {
-      exportContext.fillStyle = '#ffffff'
-      exportContext.fillRect(0, 0, exportCanvas.width, exportCanvas.height)
-    }
-    exportContext.drawImage(image, 0, 0)
-    project.marks.forEach(mark => drawMark(exportContext, mark))
+    drawComposition(exportContext, image, project.marks, outputSize, type === 'image/jpeg')
     const name = filenameFor(project.name)
     const blob = await toImageBlob(exportCanvas, type)
     download(blob, `${name}.${blob.type === 'image/jpeg' ? 'jpg' : 'png'}`)
     exportDialog.close()
     notify('Image downloaded')
   } catch {
-    notify('Could not export the image at its original size.')
+    notify('Could not export at these dimensions.')
   } finally {
     button.disabled = false
   }
@@ -511,17 +555,16 @@ function saveText(event: Event) {
 
 function pointFrom(event: PointerEvent): Point {
   const rect = canvas.getBoundingClientRect()
-  const size = imageSize()
-  return {
-    x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * size.x,
-    y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) * size.y,
-  }
+  return clampPoint({
+    x: (event.clientX - rect.left) / rect.width * outputSize.x,
+    y: (event.clientY - rect.top) / rect.height * outputSize.y,
+  }, outputSize)
 }
 
 function handleAt(mark: Mark, point: Point, pointerType: string) {
   let closest: ResizeHandle | undefined
   let distance = (pointerType === 'touch' ? 15 : 8) / displayScale
-  for (const handle of resizeHandles(mark, displayScale, imageSize())) {
+  for (const handle of resizeHandles(mark, displayScale, mark.type === 'callout' ? imageSize() : outputSize)) {
     const candidate = Math.hypot(point.x - handle.position.x, point.y - handle.position.y)
     if (candidate > distance) continue
     closest = handle
@@ -549,10 +592,17 @@ function beginGesture(event: PointerEvent) {
       mark = selected
     } else {
       mode = 'move'
-      mark = project.marks.findLast(item => hitsMark(ctx, item, start, 6 / displayScale))
+      const tolerance = 6 / displayScale
+      mark = project.marks.findLast(item => {
+        if (item.type !== 'callout') return hitsMark(ctx, item, start, tolerance)
+        const { source, inset } = layoutCallout(item, imageSize())
+        return validCrop(source) && (contains(inset, start, tolerance) || contains(source, start, tolerance))
+      })
+      if (mark?.type === 'callout' && contains(layoutCallout(mark, imageSize()).inset, start, tolerance)) mode = 'inset'
     }
     select(mark?.id)
   } else {
+    if (activeTool === 'callout' && (start.x > imageSize().x || start.y > imageSize().y)) return
     mark = makeMark(activeTool, start, start)
   }
   if (!mark) return
@@ -570,9 +620,21 @@ function continueGesture(event: PointerEvent) {
   const { start, original, mode } = gesture
   const end = pointFrom(event)
   const delta = { x: end.x - start.x, y: end.y - start.y }
-  if (mode === 'draw') gesture.mark = { ...original, to: end }
-  else if (mode === 'move') gesture.mark = moveMark(original, delta.x, delta.y)
-  else gesture.mark = resizeMark(original, mode, delta, imageSize())
+  if (mode === 'draw') {
+    gesture.mark = { ...original, to: original.type === 'callout' ? clampPoint(end, imageSize()) : end }
+  } else if (mode === 'move') {
+    gesture.mark = original.type === 'callout' ? moveCalloutSource(original, delta, imageSize()) : moveMark(original, delta.x, delta.y)
+  } else if (mode === 'inset') {
+    if (original.type !== 'callout') return
+    const { inset } = layoutCallout(original, imageSize())
+    const position = clampPoint({ x: inset.x + delta.x, y: inset.y + delta.y }, outputSize)
+    const next = { ...original, callout: { ...original.callout, position } }
+    const placed = layoutCallout(next, imageSize()).inset
+    next.callout.position = { x: placed.x, y: placed.y }
+    gesture.mark = gesture.mark.type === 'callout' && placed.x === inset.x && placed.y === inset.y ? original : next
+  } else {
+    gesture.mark = resizeMark(original, mode, delta, original.type === 'callout' ? imageSize() : outputSize)
+  }
   gesture.end = end
   paint()
 }
@@ -586,12 +648,19 @@ function finishGesture(event: PointerEvent, canceled = false) {
   const width = Math.abs(end.x - start.x) * displayScale
   const height = Math.abs(end.y - start.y) * displayScale
   const enough = mode !== 'draw' || mark.type === 'arrow' ? Math.hypot(width, height) >= 3 : width >= 3 && height >= 3
-  const changed = original.from.x !== mark.from.x || original.from.y !== mark.from.y
+  const changed = mode === 'inset' ? original !== mark : original.from.x !== mark.from.x || original.from.y !== mark.from.y
     || original.to.x !== mark.to.x || original.to.y !== mark.to.y
-  if (canceled || !enough || !changed) {
+  const usableCrop = mark.type !== 'callout' || validCrop(calloutSource(mark, imageSize()))
+  if (canceled || !enough || !changed || !usableCrop) {
     paint()
   } else if (mode === 'draw') {
+    if (mark.type === 'callout') {
+      selectedId = mark.id
+      activeTool = 'select'
+    }
     commit({ ...project, marks: [...project.marks, mark] })
+  } else if (mode === 'inset' && mark.type === 'callout') {
+    patchMark(mark.id, { callout: mark.callout })
   } else {
     patchMark(mark.id, { from: mark.from, to: mark.to })
   }
@@ -638,6 +707,14 @@ for (const button of toolButtons) button.onclick = () => useTool(button.dataset.
 for (const button of swatchButtons) button.onclick = () => {
   changeStyle({ color: button.dataset.color! })
 }
+for (const button of variantButtons) button.onclick = () => {
+  changeCallout({ variant: button.dataset.calloutVariant as CalloutOptions['variant'] })
+}
+for (const button of magnificationButtons) button.onclick = () => {
+  const magnification = magnifications.find(value => value === Number(button.dataset.calloutZoom))
+  if (magnification) changeCallout({ magnification })
+}
+element('auto-place-inset').onclick = () => changeCallout({ position: undefined })
 element('weights').onclick = event => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-weight]')
   if (button) {

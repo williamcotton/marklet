@@ -1,16 +1,19 @@
+import type { CalloutOptions } from './callouts'
+
 export type Point = { x: number; y: number }
-export type Tool = 'select' | 'box' | 'highlight' | 'arrow' | 'text'
+export type Tool = 'select' | 'box' | 'highlight' | 'arrow' | 'text' | 'callout'
 export type MarkTool = Exclude<Tool, 'select'>
 export type Style = { color: string; weight: number; opacity: number }
-export type Mark = {
+type MarkFields = {
   id: string
-  type: MarkTool
   from: Point
   to: Point
   style: Style
   text: string
   label: string
 }
+export type CalloutMark = MarkFields & { type: 'callout'; callout: CalloutOptions }
+export type Mark = CalloutMark | (MarkFields & { type: Exclude<MarkTool, 'callout'> })
 
 type Endpoint = 'from' | 'to'
 export type ResizeHandle = {
@@ -21,7 +24,7 @@ export type ResizeHandle = {
 }
 
 export const toolNames: Record<Tool, string> = {
-  select: 'Select', box: 'Rectangle', highlight: 'Highlight', arrow: 'Arrow', text: 'Text',
+  select: 'Select', box: 'Rectangle', highlight: 'Highlight', arrow: 'Arrow', text: 'Text', callout: 'Callout',
 }
 
 export const palette = [
@@ -38,6 +41,14 @@ export const defaultStyles: Record<MarkTool, Style> = {
   highlight: { color: palette[1].hex, weight: 4, opacity: 46 },
   arrow: { color: palette[0].hex, weight: 4, opacity: 100 },
   text: { color: palette[4].hex, weight: 32, opacity: 100 },
+  callout: { color: palette[1].hex, weight: 3, opacity: 100 },
+}
+
+export type Rectangle = { x: number; y: number; width: number; height: number }
+
+export function contains({ x, y, width, height }: Rectangle, point: Point, tolerance = 0) {
+  return point.x >= x - tolerance && point.x <= x + width + tolerance
+    && point.y >= y - tolerance && point.y <= y + height + tolerance
 }
 
 const fontFamily = 'Arial, sans-serif'
@@ -92,12 +103,10 @@ export function hitsMark(ctx: CanvasRenderingContext2D, mark: Mark, point: Point
     ) <= tolerance + mark.style.weight / 2
   }
 
-  const { x, y, width, height } = bounds(ctx, mark)
-  return point.x >= x - tolerance && point.x <= x + width + tolerance
-    && point.y >= y - tolerance && point.y <= y + height + tolerance
+  return contains(bounds(ctx, mark), point, tolerance)
 }
 
-export function drawMark(ctx: CanvasRenderingContext2D, mark: Mark) {
+export function drawMark(ctx: CanvasRenderingContext2D, mark: Exclude<Mark, CalloutMark>) {
   const { type, from, to, style } = mark
   ctx.save()
   ctx.globalAlpha = style.opacity / 100
@@ -157,7 +166,7 @@ export function resizeMark(mark: Mark, handle: ResizeHandle, delta: Point, image
   return updated
 }
 
-export function drawSelection(ctx: CanvasRenderingContext2D, mark: Mark, scale: number, imageSize: Point) {
+export function drawSelection(ctx: CanvasRenderingContext2D, mark: Mark, scale: number, imageSize: Point, inset?: Rectangle) {
   ctx.save()
   ctx.strokeStyle = '#3565bd'
   ctx.fillStyle = '#ffffff'
@@ -167,6 +176,10 @@ export function drawSelection(ctx: CanvasRenderingContext2D, mark: Mark, scale: 
     const padding = mark.type === 'text' ? 4 / scale : 0
     ctx.setLineDash([4 / scale, 3 / scale])
     ctx.strokeRect(x - padding, y - padding, width + padding * 2, height + padding * 2)
+    if (inset) {
+      const gap = 4 / scale
+      ctx.strokeRect(inset.x - gap, inset.y - gap, inset.width + gap * 2, inset.height + gap * 2)
+    }
     ctx.setLineDash([])
   }
   const half = 4.5 / scale

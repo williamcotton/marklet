@@ -12,6 +12,14 @@ export type Mark = {
   label: string
 }
 
+type Endpoint = 'from' | 'to'
+export type ResizeHandle = {
+  x: Endpoint
+  y: Endpoint
+  position: Point
+  cursor: 'crosshair' | 'nwse-resize' | 'nesw-resize'
+}
+
 export const toolNames: Record<Tool, string> = {
   select: 'Select', box: 'Rectangle', highlight: 'Highlight', arrow: 'Arrow', text: 'Text',
 }
@@ -123,14 +131,56 @@ export function drawMark(ctx: CanvasRenderingContext2D, mark: Mark) {
   ctx.restore()
 }
 
-export function drawSelection(ctx: CanvasRenderingContext2D, mark: Mark, scale: number) {
-  const { x, y, width, height } = bounds(ctx, mark)
-  const padding = Math.max(5 / scale, mark.type === 'box' || mark.type === 'arrow' ? mark.style.weight : 0)
+export function resizeHandles(mark: Mark, scale: number, imageSize: Point): ResizeHandle[] {
+  if (mark.type === 'text') return []
+  const insetX = Math.min(6 / scale, imageSize.x / 2)
+  const insetY = Math.min(6 / scale, imageSize.y / 2)
+  const diagonal = (mark.from.x <= mark.to.x) === (mark.from.y <= mark.to.y)
+  const make = (x: Endpoint, y: Endpoint): ResizeHandle => ({
+    x,
+    y,
+    position: {
+      x: Math.max(insetX, Math.min(imageSize.x - insetX, mark[x].x)),
+      y: Math.max(insetY, Math.min(imageSize.y - insetY, mark[y].y)),
+    },
+    cursor: mark.type === 'arrow' ? 'crosshair'
+      : (x === y) === diagonal ? 'nwse-resize' : 'nesw-resize',
+  })
+  return mark.type === 'arrow' ? [make('from', 'from'), make('to', 'to')]
+    : [make('from', 'from'), make('to', 'from'), make('to', 'to'), make('from', 'to')]
+}
+
+export function resizeMark(mark: Mark, handle: ResizeHandle, delta: Point, imageSize: Point): Mark {
+  const updated = { ...mark, from: { ...mark.from }, to: { ...mark.to } }
+  if (delta.x) updated[handle.x].x = Math.max(0, Math.min(imageSize.x, mark[handle.x].x + delta.x))
+  if (delta.y) updated[handle.y].y = Math.max(0, Math.min(imageSize.y, mark[handle.y].y + delta.y))
+  return updated
+}
+
+export function drawSelection(ctx: CanvasRenderingContext2D, mark: Mark, scale: number, imageSize: Point) {
   ctx.save()
   ctx.strokeStyle = '#3565bd'
-  ctx.lineWidth = 1.25 / scale
-  ctx.setLineDash([4 / scale, 3 / scale])
-  ctx.strokeRect(x - padding, y - padding, width + padding * 2, height + padding * 2)
+  ctx.fillStyle = '#ffffff'
+  ctx.lineWidth = 1.5 / scale
+  if (mark.type !== 'arrow') {
+    const { x, y, width, height } = bounds(ctx, mark)
+    const padding = mark.type === 'text' ? 4 / scale : 0
+    ctx.setLineDash([4 / scale, 3 / scale])
+    ctx.strokeRect(x - padding, y - padding, width + padding * 2, height + padding * 2)
+    ctx.setLineDash([])
+  }
+  const half = 4.5 / scale
+  for (const { position } of resizeHandles(mark, scale, imageSize)) {
+    if (mark.type === 'arrow') {
+      ctx.beginPath()
+      ctx.arc(position.x, position.y, half, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    } else {
+      ctx.fillRect(position.x - half, position.y - half, half * 2, half * 2)
+      ctx.strokeRect(position.x - half, position.y - half, half * 2, half * 2)
+    }
+  }
   ctx.restore()
 }
 

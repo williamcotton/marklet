@@ -1,7 +1,7 @@
 import '@fontsource-variable/dm-sans'
 import '@fontsource/instrument-serif/400.css'
 import './style.css'
-import { defaultStyles, drawMark, drawSelection, hitsMark, moveMark, toolNames, type Mark, type MarkTool, type Point, type Style, type Tool } from './annotations'
+import { defaultStyles, drawMark, drawSelection, hitsMark, moveMark, resizeHandles, resizeMark, toolNames, type Mark, type MarkTool, type Point, type ResizeHandle, type Style, type Tool } from './annotations'
 import { createDemo } from './demo'
 import { icon, toolIcons } from './icons'
 import { asDataUrl, download, filenameFor, loadImage, projectBlob, readProject, toImageBlob, type Project } from './project'
@@ -25,6 +25,7 @@ const projectInput = element<HTMLInputElement>('project-input')
 const textDialog = element<HTMLDialogElement>('text-dialog')
 const textField = element<HTMLTextAreaElement>('annotation-text')
 const exportDialog = element<HTMLDialogElement>('export-dialog')
+const layerList = element<HTMLUListElement>('layers')
 const toolButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-tool]')]
 const swatchButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-color]')]
 const uploadButtons = ['upload-image', 'empty-upload'].map(id => element<HTMLButtonElement>(id))
@@ -48,11 +49,16 @@ type Gesture = {
   pointerId: number
   start: Point
   end: Point
+  original: Mark
   mark: Mark
-  moving: boolean
+  mode: 'draw' | 'move' | ResizeHandle
 }
 let gesture: Gesture | undefined
 let textEdit: { point: Point; mark?: Mark } | undefined
+
+function imageSize() {
+  return { x: image!.naturalWidth, y: image!.naturalHeight }
+}
 
 function selectedMark() {
   return project?.marks.find(mark => mark.id === selectedId)
@@ -103,12 +109,12 @@ function paint() {
   ctx.drawImage(image, 0, 0)
 
   for (const mark of project.marks) {
-    drawMark(ctx, gesture?.moving && gesture.mark.id === mark.id ? gesture.mark : mark)
+    drawMark(ctx, gesture?.mark.id === mark.id ? gesture.mark : mark)
   }
-  if (gesture && !gesture.moving) drawMark(ctx, gesture.mark)
+  if (gesture?.mode === 'draw') drawMark(ctx, gesture.mark)
 
-  const selection = gesture?.moving ? gesture.mark : selectedMark()
-  if (selection) drawSelection(ctx, selection, displayScale)
+  const selection = gesture && gesture.mode !== 'draw' ? gesture.mark : selectedMark()
+  if (selection) drawSelection(ctx, selection, displayScale, imageSize())
 }
 
 function setDisabled(ids: string[], disabled: boolean) {
@@ -155,6 +161,13 @@ function renderStyle() {
   element('style-fields').hidden = !current
   element('style-empty').hidden = !!current
   element('style-context').hidden = !current
+  const editHint = element('annotation-edit-hint')
+  editHint.hidden = !selection
+  if (selection) {
+    editHint.textContent = selection.type === 'arrow' ? 'Drag to move, or drag an endpoint to adjust.'
+      : selection.type === 'text' ? 'Drag to move.'
+      : 'Drag to move, or drag a corner to resize.'
+  }
   canvas.className = activeTool === 'select' ? 'cursor-select' : activeTool === 'text' ? 'cursor-text' : 'cursor-draw'
   if (!current) return
 
@@ -178,46 +191,98 @@ function renderStyle() {
 }
 
 function markLabel(mark: Mark) {
-  return mark.label || (mark.type === 'text' ? mark.text.split('\n')[0] : toolNames[mark.type])
+  return mark.label || (mark.type === 'text' ? mark.text.split('\n')[0] : '') || toolNames[mark.type]
 }
+
+function createLayerRow(mark: Mark) {
+  const id = mark.id
+  const row = document.createElement('li')
+  row.className = 'layer-row'
+  const selectButton = document.createElement('button')
+  selectButton.type = 'button'
+  selectButton.className = 'layer-select'
+  selectButton.innerHTML = `<span class="layer-icon" data-kind="${mark.type}">${icon(toolIcons[mark.type])}</span>`
+  selectButton.onclick = () => select(id)
+
+  const name = document.createElement('div')
+  name.className = 'layer-name'
+  const renameButton = document.createElement('button')
+  renameButton.type = 'button'
+  renameButton.className = 'layer-rename'
+  const title = document.createElement('span')
+  title.className = 'layer-label'
+  renameButton.append(title)
+  renameButton.insertAdjacentHTML('beforeend', icon('pen'))
+
+  const input = document.createElement('input')
+  input.className = 'layer-name-input'
+  input.setAttribute('aria-label', 'Annotation name')
+  input.maxLength = 100
+  input.hidden = true
+  renameButton.onclick = () => {
+    const current = project?.marks.find(item => item.id === id)
+    if (!current) return
+    select(id)
+    input.value = markLabel(current)
+    renameButton.hidden = true
+    input.hidden = false
+    input.focus()
+    input.select()
+  }
+  function finishRename(cancel: boolean) {
+    if (input.hidden) return
+    const current = project?.marks.find(item => item.id === id)
+    const value = input.value.trim()
+    renameButton.hidden = false
+    input.hidden = true
+    if (!cancel && current && value !== markLabel(current) && value !== current.label) patchMark(id, { label: value })
+  }
+  input.onblur = () => finishRename(false)
+  input.onkeydown = event => {
+    if (event.isComposing || (event.key !== 'Enter' && event.key !== 'Escape')) return
+    event.preventDefault()
+    finishRename(event.key === 'Escape')
+    renameButton.focus()
+  }
+  name.append(renameButton, input)
+
+  const remove = document.createElement('button')
+  remove.type = 'button'
+  remove.className = 'icon-button layer-remove'
+  remove.title = 'Delete annotation'
+  remove.innerHTML = icon('trash')
+  remove.onclick = () => removeMark(id, true)
+  row.append(selectButton, name, remove)
+  return { row, selectButton, renameButton, title, remove }
+}
+
+const layerRows = new Map<string, ReturnType<typeof createLayerRow>>()
 
 function renderLayers() {
   const marks = project?.marks ?? []
   element('layer-count').textContent = String(marks.length)
   element('layers-empty').hidden = marks.length > 0
-  const rows = marks.map(mark => {
-    const row = document.createElement('li')
-    row.className = 'layer-row'
+  const ids = new Set(marks.map(mark => mark.id))
+  for (const [id, layer] of layerRows) {
+    if (ids.has(id)) continue
+    layer.row.remove()
+    layerRows.delete(id)
+  }
+  marks.forEach((mark, index) => {
+    const layer = layerRows.get(mark.id) ?? createLayerRow(mark)
+    layerRows.set(mark.id, layer)
     const selected = mark.id === selectedId
-    row.classList.toggle('is-selected', selected)
     const label = markLabel(mark)
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'layer-select'
-    button.setAttribute('aria-pressed', String(selected))
-    const badge = document.createElement('span')
-    badge.className = 'layer-icon'
-    badge.dataset.kind = mark.type
-    badge.innerHTML = icon(toolIcons[mark.type])
-    const title = document.createElement('span')
-    title.className = 'layer-label'
-    title.textContent = label
-    button.append(badge, title)
-    button.onclick = () => {
-      select(mark.id)
-      element('layers').querySelectorAll<HTMLButtonElement>('.layer-select')[marks.indexOf(mark)]?.focus()
-    }
-    const remove = document.createElement('button')
-    remove.type = 'button'
-    remove.className = 'icon-button layer-remove'
-    remove.setAttribute('aria-label', `Delete ${label}`)
-    remove.title = 'Delete annotation'
-    remove.innerHTML = icon('trash')
-    remove.onclick = () => removeMark(mark.id, true)
-    row.append(button, remove)
-    return row
+    layer.row.classList.toggle('is-selected', selected)
+    layer.selectButton.setAttribute('aria-pressed', String(selected))
+    layer.selectButton.setAttribute('aria-label', `Select ${label}`)
+    layer.selectButton.title = `Select ${label}`
+    layer.renameButton.setAttribute('aria-label', `Rename ${label}`)
+    layer.renameButton.title = `Rename ${label}`
+    layer.title.textContent = label
+    layer.remove.setAttribute('aria-label', `Delete ${label}`)
+    if (layerList.children[index] !== layer.row) layerList.insertBefore(layer.row, layerList.children[index] ?? null)
   })
-  element('layers').replaceChildren(...rows)
 }
 
 function update() {
@@ -234,6 +299,11 @@ function commit(next: Project) {
   future.length = 0
   project = next
   update()
+}
+
+function patchMark(id: string, changes: Partial<Pick<Mark, 'label' | 'text' | 'style' | 'from' | 'to'>>) {
+  if (!project?.marks.some(mark => mark.id === id)) return
+  commit({ ...project, marks: project.marks.map(mark => mark.id === id ? { ...mark, ...changes } : mark) })
 }
 
 function historyStep(isRedo: boolean) {
@@ -270,7 +340,7 @@ function removeMark(id: string, focusLayer = false) {
   if (selectedId === id) selectedId = undefined
   commit({ ...project, marks: project.marks.filter(mark => mark.id !== id) })
   if (focusLayer) {
-    const buttons = element('layers').querySelectorAll<HTMLButtonElement>('.layer-select')
+    const buttons = layerList.querySelectorAll<HTMLButtonElement>('.layer-select')
     const target = buttons[Math.min(index, buttons.length - 1)] ?? element<HTMLButtonElement>('shortcuts')
     target.focus()
   }
@@ -282,7 +352,7 @@ function changeStyle(properties: Partial<Style>) {
   if (Object.entries(properties).every(([key, value]) => current.style[key as keyof Style] === value)) return
   const style = { ...current.style, ...properties }
   const mark = selectedMark()
-  if (mark) commit({ ...project, marks: project.marks.map(item => item.id === mark.id ? { ...item, style } : item) })
+  if (mark) patchMark(mark.id, { style })
   else {
     styles[current.type] = style
     renderStyle()
@@ -302,6 +372,8 @@ function rename() {
 }
 
 function installProject(next: Project, nextImage: HTMLImageElement) {
+  layerList.replaceChildren()
+  layerRows.clear()
   project = next
   savedProject = next
   image = nextImage
@@ -368,6 +440,7 @@ async function openExample() {
 
 function saveProject() {
   if (!project) return
+  if (document.activeElement instanceof HTMLInputElement && layerList.contains(document.activeElement)) document.activeElement.blur()
   rename()
   download(projectBlob(project), `${filenameFor(project.name)}.marklet`)
   savedProject = project
@@ -432,44 +505,74 @@ function saveText(event: Event) {
   }
   const { point, mark } = textEdit
   if (!mark) commit({ ...project, marks: [...project.marks, makeMark('text', point, point, value)] })
-  else if (mark.text !== value) commit({
-    ...project,
-    marks: project.marks.map(item => item.id === mark.id ? { ...item, text: value, label: '' } : item),
-  })
+  else if (mark.text !== value) patchMark(mark.id, { text: value })
   textDialog.close()
 }
 
 function pointFrom(event: PointerEvent): Point {
   const rect = canvas.getBoundingClientRect()
+  const size = imageSize()
   return {
-    x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * image!.naturalWidth,
-    y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) * image!.naturalHeight,
+    x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * size.x,
+    y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) * size.y,
   }
+}
+
+function handleAt(mark: Mark, point: Point, pointerType: string) {
+  let closest: ResizeHandle | undefined
+  let distance = (pointerType === 'touch' ? 15 : 8) / displayScale
+  for (const handle of resizeHandles(mark, displayScale, imageSize())) {
+    const candidate = Math.hypot(point.x - handle.position.x, point.y - handle.position.y)
+    if (candidate > distance) continue
+    closest = handle
+    distance = candidate
+  }
+  return closest
 }
 
 function beginGesture(event: PointerEvent) {
   if (!image || !project || gesture || !event.isPrimary || event.button !== 0) return
   event.preventDefault()
+  if (document.activeElement instanceof HTMLInputElement && layerList.contains(document.activeElement)) document.activeElement.blur()
   const start = pointFrom(event)
   if (activeTool === 'text') {
     openText(start)
     return
   }
-  const moving = activeTool === 'select'
-  const mark = moving
-    ? project.marks.findLast(item => hitsMark(ctx, item, start, 6 / displayScale))
-    : makeMark(activeTool as Exclude<MarkTool, 'text'>, start, start)
-  if (moving) select(mark?.id)
+  let mode: Gesture['mode'] = 'draw'
+  let mark: Mark | undefined
+  if (activeTool === 'select') {
+    const selected = selectedMark()
+    const handle = selected && handleAt(selected, start, event.pointerType)
+    if (handle) {
+      mode = handle
+      mark = selected
+    } else {
+      mode = 'move'
+      mark = project.marks.findLast(item => hitsMark(ctx, item, start, 6 / displayScale))
+    }
+    select(mark?.id)
+  } else {
+    mark = makeMark(activeTool, start, start)
+  }
   if (!mark) return
-  gesture = { pointerId: event.pointerId, start, end: start, mark, moving }
+  gesture = { pointerId: event.pointerId, start, end: start, original: mark, mark, mode }
   canvas.setPointerCapture(event.pointerId)
 }
 
 function continueGesture(event: PointerEvent) {
-  if (!gesture || event.pointerId !== gesture.pointerId) return
+  if (!gesture) {
+    const mark = image && selectedMark()
+    canvas.style.cursor = mark ? handleAt(mark, pointFrom(event), event.pointerType)?.cursor ?? '' : ''
+    return
+  }
+  if (event.pointerId !== gesture.pointerId) return
+  const { start, original, mode } = gesture
   const end = pointFrom(event)
-  if (gesture.moving) gesture.mark = moveMark(gesture.mark, end.x - gesture.end.x, end.y - gesture.end.y)
-  else gesture.mark = { ...gesture.mark, to: end }
+  const delta = { x: end.x - start.x, y: end.y - start.y }
+  if (mode === 'draw') gesture.mark = { ...original, to: end }
+  else if (mode === 'move') gesture.mark = moveMark(original, delta.x, delta.y)
+  else gesture.mark = resizeMark(original, mode, delta, imageSize())
   gesture.end = end
   paint()
 }
@@ -477,15 +580,21 @@ function continueGesture(event: PointerEvent) {
 function finishGesture(event: PointerEvent, canceled = false) {
   if (!gesture || !project || event.pointerId !== gesture.pointerId) return
   if (!canceled) continueGesture(event)
-  const { end, start, mark, moving } = gesture
+  const { end, start, mark, mode, original } = gesture
   gesture = undefined
+  canvas.style.cursor = ''
   const width = Math.abs(end.x - start.x) * displayScale
   const height = Math.abs(end.y - start.y) * displayScale
-  const enough = moving || mark.type === 'arrow' ? Math.hypot(width, height) >= 3 : width >= 3 && height >= 3
-  if (!canceled && enough) {
-    const marks = moving ? project.marks.map(item => item.id === mark.id ? mark : item) : [...project.marks, mark]
-    commit({ ...project, marks })
-  } else paint()
+  const enough = mode !== 'draw' || mark.type === 'arrow' ? Math.hypot(width, height) >= 3 : width >= 3 && height >= 3
+  const changed = original.from.x !== mark.from.x || original.from.y !== mark.from.y
+    || original.to.x !== mark.to.x || original.to.y !== mark.to.y
+  if (canceled || !enough || !changed) {
+    paint()
+  } else if (mode === 'draw') {
+    commit({ ...project, marks: [...project.marks, mark] })
+  } else {
+    patchMark(mark.id, { from: mark.from, to: mark.to })
+  }
 }
 
 function zoomBy(multiplier: number) {
@@ -570,6 +679,7 @@ canvas.onpointermove = continueGesture
 canvas.onpointerup = event => finishGesture(event)
 canvas.onpointercancel = event => finishGesture(event, true)
 canvas.onlostpointercapture = event => finishGesture(event, true)
+canvas.onpointerleave = () => { if (!gesture) canvas.style.cursor = '' }
 
 let dragEntries = 0
 document.addEventListener('dragenter', event => {
@@ -607,6 +717,13 @@ document.addEventListener('paste', event => {
 
 document.addEventListener('keydown', event => {
   if (document.querySelector('dialog[open]')) return
+  if (gesture) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      canvas.releasePointerCapture(gesture.pointerId)
+    }
+    return
+  }
   const key = event.key.toLowerCase()
   const modifier = event.metaKey || event.ctrlKey
   if (modifier && key === 's' && project) {

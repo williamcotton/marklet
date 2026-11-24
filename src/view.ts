@@ -73,6 +73,7 @@ export const editorMarkup = `
       <section class="style-panel" aria-labelledby="style-title">
         <div class="section-title">${icon('sliders')}<h2 id="style-title">Style</h2></div>
         <p class="panel-context" id="style-context">Rectangle tool</p>
+        <p class="panel-context" id="annotation-edit-hint" hidden></p>
         <div id="style-fields">
           <h3 id="color-label">Color</h3>
           <div class="palette" role="group" aria-labelledby="color-label">${swatches}</div>

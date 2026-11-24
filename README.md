@@ -15,7 +15,7 @@ See the [latest release](https://github.com/williamcotton/marklet/releases/lates
 
 ![Marklet showing a 3D callout over a TypeScript screenshot](docs/screenshots/3d-callout.png)
 
-Add outlined boxes, highlights, arrows, and text to explain the rest of the screenshot. Select an annotation to edit it or click its name in the sidebar to rename it.
+Add outlined boxes, highlights, arrows, and text to explain the rest of the screenshot. Select an annotation to edit it or click its name in the sidebar to rename it. Drag a layer by its handle to move it forward or backward in the stack.
 
 ![Marklet showing a code review with a box, yellow highlight, arrow, and text note](docs/screenshots/review-markup.png)
 

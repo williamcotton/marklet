@@ -4,6 +4,7 @@ import { contains, defaultStyles, drawMark, drawSelection, hitsMark, moveMark, r
 import { calloutSource, clampPoint, compositionSize, defaultCallout, drawComposition, layoutCallout, magnifications, moveCalloutSource, validCrop, type CalloutOptions } from './callouts'
 import { createDemo } from './demo'
 import { icon, toolIcons } from './icons'
+import { installLayerDrag } from './layer-drag'
 import { asDataUrl, download, filenameFor, loadImage, projectBlob, readProject, toImageBlob, type Project } from './project'
 import { editorMarkup, shortcutByTool } from './view'
 
@@ -229,6 +230,19 @@ function createLayerRow(mark: Mark) {
   const id = mark.id
   const row = document.createElement('li')
   row.className = 'layer-row'
+  row.dataset.layerId = id
+  const grip = document.createElement('button')
+  grip.type = 'button'
+  grip.className = 'icon-button layer-grip'
+  grip.title = 'Drag to reorder. Use Up or Down when focused.'
+  grip.setAttribute('aria-keyshortcuts', 'ArrowUp ArrowDown')
+  grip.innerHTML = icon('grip')
+  grip.onkeydown = event => {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+    const index = [...layerList.children].indexOf(row)
+    event.preventDefault()
+    reorderLayer(id, index + (event.key === 'ArrowUp' ? -1 : 1))
+  }
   const selectButton = document.createElement('button')
   selectButton.type = 'button'
   selectButton.className = 'layer-select'
@@ -283,16 +297,18 @@ function createLayerRow(mark: Mark) {
   remove.title = 'Delete annotation'
   remove.innerHTML = icon('trash')
   remove.onclick = () => removeMark(id, true)
-  row.append(selectButton, name, remove)
-  return { row, selectButton, renameButton, title, remove }
+  row.append(grip, selectButton, name, remove)
+  return { row, grip, selectButton, renameButton, title, remove }
 }
 
 const layerRows = new Map<string, ReturnType<typeof createLayerRow>>()
 
 function renderLayers() {
-  const marks = project?.marks ?? []
+  // The renderer and project format store the backmost layer first.
+  const marks = project?.marks.toReversed() ?? []
   element('layer-count').textContent = String(marks.length)
   element('layers-empty').hidden = marks.length > 0
+  element('layers-reorder-hint').hidden = marks.length < 2
   const ids = new Set(marks.map(mark => mark.id))
   for (const [id, layer] of layerRows) {
     if (ids.has(id)) continue
@@ -305,6 +321,8 @@ function renderLayers() {
     const selected = mark.id === selectedId
     const label = markLabel(mark)
     layer.row.classList.toggle('is-selected', selected)
+    layer.grip.disabled = marks.length < 2
+    layer.grip.setAttribute('aria-label', `Reorder ${label}`)
     layer.selectButton.setAttribute('aria-pressed', String(selected))
     layer.selectButton.setAttribute('aria-label', `Select ${label}`)
     layer.selectButton.title = `Select ${label}`
@@ -371,7 +389,7 @@ function useTool(tool: Tool) {
 
 function removeMark(id: string, focusLayer = false) {
   if (!project) return
-  const index = project.marks.findIndex(mark => mark.id === id)
+  const index = project.marks.length - 1 - project.marks.findIndex(mark => mark.id === id)
   if (selectedId === id) selectedId = undefined
   commit({ ...project, marks: project.marks.filter(mark => mark.id !== id) })
   if (focusLayer) {
@@ -380,6 +398,26 @@ function removeMark(id: string, focusLayer = false) {
     target.focus()
   }
 }
+
+function reorderLayer(id: string, topIndex: number) {
+  if (!project) return
+  const from = project.marks.findIndex(mark => mark.id === id)
+  const to = project.marks.length - 1 - topIndex
+  if (from < 0 || to < 0 || to >= project.marks.length || from === to) return
+  const marks = [...project.marks]
+  const [mark] = marks.splice(from, 1)
+  marks.splice(to, 0, mark)
+  const grip = layerRows.get(id)?.grip
+  const restoreFocus = document.activeElement === grip
+  commit({ ...project, marks })
+  if (restoreFocus && grip) {
+    grip.focus({ preventScroll: true })
+    grip.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }
+  notify(`${markLabel(mark)} moved to layer ${topIndex + 1} of ${marks.length}`)
+}
+
+const cancelLayerDrag = installLayerDrag(layerList, reorderLayer)
 
 function changeStyle(properties: Partial<Style>) {
   const current = activeStyle()
@@ -421,6 +459,7 @@ function rename() {
 }
 
 function installProject(next: Project, nextImage: HTMLImageElement) {
+  cancelLayerDrag()
   layerList.replaceChildren()
   layerRows.clear()
   project = next

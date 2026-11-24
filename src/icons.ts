@@ -5,6 +5,7 @@ import circleHelp from 'lucide-static/icons/circle-help.svg?raw'
 import download from 'lucide-static/icons/download.svg?raw'
 import fileImage from 'lucide-static/icons/image.svg?raw'
 import folder from 'lucide-static/icons/folder-open.svg?raw'
+import grip from 'lucide-static/icons/grip-vertical.svg?raw'
 import highlighter from 'lucide-static/icons/highlighter.svg?raw'
 import layers from 'lucide-static/icons/layers.svg?raw'
 import mouse from 'lucide-static/icons/mouse-pointer-2.svg?raw'
@@ -23,7 +24,7 @@ import upload from 'lucide-static/icons/upload.svg?raw'
 import x from 'lucide-static/icons/x.svg?raw'
 import zoom from 'lucide-static/icons/zoom-in.svg?raw'
 
-const icons = { arrow, check, chevron, circleHelp, download, fileImage, folder, highlighter, layers, mouse, minus, pen, plus, redo, save, scan, sliders, square, trash, type, undo, upload, x, zoom }
+const icons = { arrow, check, chevron, circleHelp, download, fileImage, folder, grip, highlighter, layers, mouse, minus, pen, plus, redo, save, scan, sliders, square, trash, type, undo, upload, x, zoom }
 
 export function icon(name: keyof typeof icons) {
   return icons[name].replace('<svg', '<svg aria-hidden="true" focusable="false"')

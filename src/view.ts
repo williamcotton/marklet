@@ -109,6 +109,7 @@ export const editorMarkup = `
       </section>
       <section class="layers-panel" aria-labelledby="layers-title">
         <div class="section-title">${icon('layers')}<h2 id="layers-title">Annotations</h2><span class="layer-count" id="layer-count">0</span></div>
+        <p class="panel-context" id="layers-reorder-hint" hidden>Drag to reorder. Top layers appear in front.</p>
         <ul class="layers-list" id="layers"></ul>
         <p class="panel-context" id="layers-empty">Draw on the image to add an annotation.</p>
       </section>
@@ -145,6 +146,7 @@ export const editorMarkup = `
     <div class="dialog-heading"><h2 id="shortcuts-title">Keyboard shortcuts</h2><button class="icon-button" type="button" data-close aria-label="Close">${icon('x')}</button></div>
     <div class="shortcuts-list">
       ${shortcuts}
+      <div><span>Reorder with layer handle focused</span><kbd>↑ / ↓</kbd></div>
       <div><span>Undo</span><kbd>Ctrl / ⌘ + Z</kbd></div>
       <div><span>Redo</span><kbd>Ctrl / ⌘ + Shift + Z</kbd></div>
       <div><span>Delete annotation</span><kbd>Delete</kbd></div>

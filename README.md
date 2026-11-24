@@ -9,7 +9,7 @@ Marklet is a desktop and web app for annotating screenshots. Open an image, pres
 - [Windows x64 installer](https://github.com/williamcotton/marklet/releases/latest/download/Marklet-windows-x64.exe)
 - [macOS Apple Silicon disk image](https://github.com/williamcotton/marklet/releases/latest/download/Marklet-mac-arm64.dmg)
 - [macOS Intel disk image](https://github.com/williamcotton/marklet/releases/latest/download/Marklet-mac-x64.dmg)
-- [Linux x64 AppImage](https://github.com/williamcotton/marklet/releases/latest/download/Marklet-linux-x64.AppImage)
+- [Linux x64 AppImage](https://github.com/williamcotton/marklet/releases/latest/download/Marklet-linux-x86_64.AppImage)
 
 See the [latest release](https://github.com/williamcotton/marklet/releases/latest) for release notes. The macOS builds are ad-hoc signed without Apple notarization. The Windows installer is unsigned.
 

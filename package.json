@@ -6,6 +6,7 @@
   "author": "William Cotton",
   "type": "module",
   "main": "dist-electron/main.js",
+  "desktopName": "com.williamcotton.marklet.desktop",
   "scripts": {
     "test": "tsc --noEmit && tsc -p electron --noEmit",
     "dev": "vite --host 0.0.0.0",

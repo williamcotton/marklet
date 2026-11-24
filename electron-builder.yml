@@ -26,4 +26,5 @@ win:
 linux:
   target: AppImage
   category: Graphics
+  syncDesktopName: true
   artifactName: Marklet-linux-${arch}.${ext}

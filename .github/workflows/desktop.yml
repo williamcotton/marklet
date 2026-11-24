@@ -34,7 +34,7 @@ jobs:
           - platform: Linux x64
             runner: ubuntu-24.04
             arch: x64
-            asset: Marklet-linux-x64.AppImage
+            asset: Marklet-linux-x86_64.AppImage
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,5 +79,5 @@ jobs:
             installers/Marklet-windows-x64.exe \
             installers/Marklet-mac-arm64.dmg \
             installers/Marklet-mac-x64.dmg \
-            installers/Marklet-linux-x64.AppImage \
+            installers/Marklet-linux-x86_64.AppImage \
             --title "Marklet $GITHUB_REF_NAME" --verify-tag --generate-notes --latest

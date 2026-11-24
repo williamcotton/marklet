@@ -1,0 +1,29 @@
+appId: com.williamcotton.marklet
+productName: Marklet
+directories:
+  output: release
+  buildResources: electron/resources
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - electron/resources/icon.png
+  - '!node_modules/**/*'
+icon: electron/resources/icon.png
+
+mac:
+  target: dmg
+  category: public.app-category.graphics-design
+  artifactName: Marklet-mac-${arch}.${ext}
+  identity: '-'
+  entitlements: electron/resources/entitlements.mac.plist
+  entitlementsInherit: electron/resources/entitlements.mac.plist
+  notarize: false
+
+win:
+  target: nsis
+  artifactName: Marklet-windows-${arch}.${ext}
+
+linux:
+  target: AppImage
+  category: Graphics
+  artifactName: Marklet-linux-${arch}.${ext}

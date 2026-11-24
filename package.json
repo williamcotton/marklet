@@ -1,0 +1,23 @@
+{
+  "name": "marklet",
+  "version": "0.0.1",
+  "description": "Screenshot and image annotations",
+  "license": "ISC",
+  "author": "William Cotton",
+  "type": "module",
+  "scripts": {
+    "test": "tsc --noEmit",
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  },
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource/instrument-serif": "^5.3.0",
+    "lucide-static": "^1.79.0"
+  }
+}

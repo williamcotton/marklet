@@ -1,8 +1,9 @@
-import { app, BrowserWindow, net, protocol } from 'electron'
+import { app, BrowserWindow, dialog, net, protocol } from 'electron'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { installMenu } from './menu.js'
 
-const origin = 'marklet://app'
+const editorUrl = 'marklet://app/'
 const contentSecurityPolicy = [
   "default-src 'self'",
   "img-src 'self' data: blob:",
@@ -56,11 +57,26 @@ function openEditor() {
 
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', event => event.preventDefault())
-  void window.loadURL(`${origin}/`)
+  window.webContents.on('will-prevent-unload', event => {
+    const choice = dialog.showMessageBoxSync(window, {
+      type: 'warning',
+      title: 'Unsaved Changes',
+      message: 'Discard unsaved changes?',
+      detail: 'Keep editing to save your project before closing Marklet.',
+      buttons: ['Keep Editing', 'Discard Changes'],
+      defaultId: 0,
+      cancelId: 0,
+    })
+    // Prevent Electron from honoring the renderer's request to cancel closing.
+    if (choice === 1) event.preventDefault()
+  })
+  void window.loadURL(editorUrl)
+  return window
 }
 
 void app.whenReady().then(() => {
   protocol.handle('marklet', serveEditor)
+  installMenu(openEditor, editorUrl)
   openEditor()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) openEditor()

@@ -12,7 +12,6 @@ icon: electron/resources/icon.png
 publish: null
 
 mac:
-  icon: electron/resources/icon.icns
   target: dmg
   category: public.app-category.graphics-design
   artifactName: Marklet-mac-${arch}.${ext}

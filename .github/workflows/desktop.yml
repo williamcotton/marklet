@@ -45,6 +45,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run typecheck
       - run: npm test
       - name: Verify release version
         if: github.ref_type == 'tag'
@@ -75,6 +76,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          set -eu
+          for file in Marklet-windows-x64.exe Marklet-mac-arm64.dmg Marklet-mac-x64.dmg Marklet-linux-x86_64.AppImage; do
+            test -s "installers/$file"
+          done
           gh release create "$GITHUB_REF_NAME" \
             installers/Marklet-windows-x64.exe \
             installers/Marklet-mac-arm64.dmg \

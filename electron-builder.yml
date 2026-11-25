@@ -9,8 +9,10 @@ files:
   - electron/resources/icon.png
   - '!node_modules/**/*'
 icon: electron/resources/icon.png
+publish: null
 
 mac:
+  icon: electron/resources/icon.icns
   target: dmg
   category: public.app-category.graphics-design
   artifactName: Marklet-mac-${arch}.${ext}
@@ -21,6 +23,7 @@ mac:
 
 win:
   target: nsis
+  signExecutable: false
   artifactName: Marklet-windows-${arch}.${ext}
 
 linux:

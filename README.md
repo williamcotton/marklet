@@ -19,7 +19,7 @@ Add outlined boxes, highlights, arrows, and text to explain the rest of the scre
 
 ![Marklet showing a code review with a box, yellow highlight, arrow, and text note](docs/screenshots/review-markup.png)
 
-Export a PNG or JPEG to share, or save a **.marklet** project to keep editing later.
+Open a **.webstamp** file to annotate its capture. **Source details** shows the captured URL and timestamp. A saved **.marklet** project contains the editable layers, the original capture, and an annotated image. Export PNG or JPEG for use outside Evidence Works.
 
 ## Run from source
 

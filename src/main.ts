@@ -1,11 +1,12 @@
 import '@fontsource-variable/dm-sans'
+import { fitsDisplayImage, imageLimits } from '@evidenceworks/document'
 import './style.css'
 import { contains, defaultStyles, drawMark, drawSelection, hitsMark, moveMark, resizeHandles, resizeMark, toolNames, type Mark, type MarkTool, type Point, type ResizeHandle, type Style, type Tool } from './annotations'
 import { calloutSource, clampPoint, compositionSize, defaultCallout, drawComposition, layoutCallout, magnifications, moveCalloutSource, validCrop, type CalloutOptions } from './callouts'
 import { createDemo } from './demo'
 import { icon, toolIcons } from './icons'
 import { installLayerDrag } from './layer-drag'
-import { asDataUrl, download, filenameFor, loadImage, projectBlob, readProject, toImageBlob, type Project } from './project'
+import { download, filenameFor, imageProject, loadProjectImage, projectBlob, readProject, toImageBlob, type Project } from './project'
 import { editorMarkup, shortcutByTool } from './view'
 
 document.querySelector('#app')!.innerHTML = editorMarkup
@@ -26,6 +27,7 @@ const projectInput = element<HTMLInputElement>('project-input')
 const textDialog = element<HTMLDialogElement>('text-dialog')
 const textField = element<HTMLTextAreaElement>('annotation-text')
 const exportDialog = element<HTMLDialogElement>('export-dialog')
+const sourceDialog = element<HTMLDialogElement>('source-dialog')
 const layerList = element<HTMLUListElement>('layers')
 const toolButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-tool]')]
 const swatchButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-color]')]
@@ -38,7 +40,7 @@ const future: Project[] = []
 const styles = structuredClone(defaultStyles)
 let project: Project | undefined
 let savedProject: Project | undefined
-let sampleSource: string | undefined
+let sampleId: string | undefined
 let image: HTMLImageElement | undefined
 let outputSize: Point = { x: 0, y: 0 }
 let activeTool: Tool = 'box'
@@ -47,6 +49,7 @@ let selectedId: string | undefined
 let zoom: number | undefined
 let displayScale = 1
 let loading = false
+let saving = false
 let openRequest = 0
 let toastTimer: number | undefined
 
@@ -153,7 +156,7 @@ function renderHeader() {
   sizeProjectName()
   projectName.disabled = !project
   element('image-name').textContent = project?.imageName ?? 'No image loaded'
-  element('sample-badge').hidden = !project || project.imageSrc !== sampleSource
+  element('sample-badge').hidden = !project || project.id !== sampleId
   element('image-size').textContent = image ? `${outputSize.x} × ${outputSize.y} px` : '—'
   element('document-state').textContent = project
     ? project !== savedProject ? 'Unsaved changes' : 'Saved'
@@ -161,6 +164,8 @@ function renderHeader() {
   element('document-state').classList.toggle('unsaved', !!project && project !== savedProject)
 
   setDisabled(['save-project', 'export-image', 'rename-project', 'zoom-fit'], !project)
+  element<HTMLButtonElement>('save-project').disabled = !project || saving
+  element<HTMLButtonElement>('source-details').disabled = !project
   if (!project) setDisabled(['zoom-in', 'zoom-out'], true)
   setDisabled(['undo'], !past.length)
   setDisabled(['redo'], !future.length)
@@ -476,28 +481,29 @@ function installProject(next: Project, nextImage: HTMLImageElement) {
 }
 
 async function openFile(file: File, kind?: 'image' | 'project') {
-  const isProject = kind ? kind === 'project' : /\.(marklet|json)$/i.test(file.name)
+  const isProject = kind ? kind === 'project' : /\.(marklet|webstamp|juxtapose)$/i.test(file.name)
   if (project && project !== savedProject && !window.confirm('Replace this project and discard unsaved changes?')) return
   const previous = project
   const request = ++openRequest
   loading = true
   renderHeader()
   try {
-    const next: Project = isProject
-      ? readProject(await file.text())
-      : { name: file.name.replace(/\.[^.]+$/, '') || 'Untitled project', imageName: file.name || 'Pasted image', imageSrc: await asDataUrl(file), marks: [] }
-    const decoded = await loadImage(next.imageSrc)
+    const { project: next, native } = isProject ? await readProject(file) : {
+      project: await imageProject(file, file.name.replace(/\.[^.]+$/, '') || 'Untitled project', file.name || 'Pasted image'),
+      native: false,
+    }
+    const decoded = await loadProjectImage(next)
     if (request !== openRequest) return
     if (project !== previous && project !== savedProject && !window.confirm('Discard the changes made while opening this file?')) return
     installProject(next, decoded)
-    if (!isProject) {
+    if (!native) {
       savedProject = undefined
       renderHeader()
     }
-    notify(isProject ? 'Project opened' : 'Image opened')
-  } catch {
+    notify(native ? 'Project opened' : isProject ? 'Evidence opened in a new project' : 'Image opened')
+  } catch (error) {
     if (request === openRequest) {
-      notify(isProject ? 'Could not open this Marklet project.' : 'Could not open this image. Try a PNG, JPEG, or WebP.')
+      notify(isProject && error instanceof Error ? error.message : 'Could not open this image. Try a PNG, JPEG, or WebP.')
     }
   } finally {
     if (request === openRequest) {
@@ -513,9 +519,9 @@ async function openExample() {
   const request = openRequest
   try {
     const example = await createDemo()
-    const decoded = await loadImage(example.imageSrc)
+    const decoded = await loadProjectImage(example)
     if (request !== openRequest) return
-    sampleSource = example.imageSrc
+    sampleId = example.id
     installProject(example, decoded)
     select(example.marks[0]?.id)
   } catch {
@@ -526,14 +532,48 @@ async function openExample() {
   }
 }
 
-function saveProject() {
-  if (!project) return
+async function renderImage(source: HTMLImageElement, marks: Mark[], size: Point, type: string, width = size.x, height = size.y) {
+  const output = document.createElement('canvas')
+  output.width = width
+  output.height = height
+  const context = output.getContext('2d')
+  if (!context) throw new Error('Image exceeds this browser’s canvas limits.')
+  context.scale(width / size.x, height / size.y)
+  drawComposition(context, source, marks, size, type === 'image/jpeg')
+  return toImageBlob(output, type)
+}
+
+async function saveProject() {
+  if (!project || !image || saving) return
   if (document.activeElement instanceof HTMLInputElement && layerList.contains(document.activeElement)) document.activeElement.blur()
   rename()
-  download(projectBlob(project), `${filenameFor(project.name)}.marklet`)
-  savedProject = project
+  const snapshot = project
+  const source = image
+  const size = compositionSize(snapshot.marks, imageSize())
+  const request = openRequest
+  saving = true
   renderHeader()
-  notify('Project downloaded')
+  try {
+    let scale = Math.min(1, imageLimits.side / size.x, imageLimits.side / size.y, Math.sqrt(imageLimits.pixels / (size.x * size.y)))
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const width = Math.max(1, Math.floor(size.x * scale))
+      const height = Math.max(1, Math.floor(size.y * scale))
+      const rendered = await renderImage(source, snapshot.marks, size, 'image/png', width, height)
+      if (fitsDisplayImage(rendered.size, width, height)) {
+        download(await projectBlob(snapshot, rendered), `${filenameFor(snapshot.name)}.marklet`)
+        if (openRequest === request) savedProject = snapshot
+        notify('Project downloaded')
+        return
+      }
+      scale *= .7
+    }
+    throw new Error('Could not create a handoff image within the display limits.')
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'Could not save the project.')
+  } finally {
+    saving = false
+    renderHeader()
+  }
 }
 
 function openExport() {
@@ -542,21 +582,64 @@ function openExport() {
   exportDialog.showModal()
 }
 
+const editableSource = (current: Project) => current.assets.find(asset =>
+  asset.id === current.canvasEntryId && !asset.origin && asset.provenance?.type === 'imported-image')
+
+function openSourceDetails() {
+  if (!project) return
+  const summary = element('source-summary')
+  summary.replaceChildren()
+  for (const entry of project.assets) {
+    const provenance = entry.provenance
+    const fields: [string, unknown][] = [
+      ['Source', provenance?.filename ?? provenance?.title ?? entry.path],
+      ['URL', provenance?.url],
+      ['Captured', provenance?.capturedAt],
+      ['Time zone', provenance?.timezone],
+      ['Repository path', provenance?.repositoryPath],
+      ['Commit', provenance?.commit],
+      ['Source description', provenance?.userSupplied?.description],
+      ['Production identifier', provenance?.userSupplied?.productionId],
+    ]
+    for (const [label, value] of fields) {
+      if (typeof value !== 'string' || !value) continue
+      const term = document.createElement('dt')
+      const detail = document.createElement('dd')
+      term.textContent = label
+      detail.textContent = value
+      summary.append(term, detail)
+    }
+  }
+  const source = editableSource(project)
+  element('source-form').hidden = !source
+  const user = source?.provenance?.userSupplied
+  element<HTMLTextAreaElement>('source-description').value = typeof user?.description === 'string' ? user.description : ''
+  element<HTMLInputElement>('source-production').value = typeof user?.productionId === 'string' ? user.productionId : ''
+  sourceDialog.showModal()
+}
+
+element('source-details').onclick = openSourceDetails
+element('source-form').onsubmit = event => {
+  event.preventDefault()
+  if (!project) return
+  const source = editableSource(project)
+  if (!source?.provenance) return
+  const description = element<HTMLTextAreaElement>('source-description').value.trim()
+  const productionId = element<HTMLInputElement>('source-production').value.trim()
+  const provenance = { ...source.provenance, userSupplied: { ...(description ? { description } : {}), ...(productionId ? { productionId } : {}) } }
+  commit({ ...project, assets: project.assets.map(entry => entry === source ? { ...entry, provenance } : entry) })
+  sourceDialog.close()
+}
+
 async function exportImage(event: Event) {
   event.preventDefault()
   if (!project || !image) return
   const button = element<HTMLButtonElement>('export-submit')
   const type = element<HTMLSelectElement>('export-format').value
-  const exportCanvas = document.createElement('canvas')
-  exportCanvas.width = outputSize.x
-  exportCanvas.height = outputSize.y
   button.disabled = true
   try {
-    const exportContext = exportCanvas.getContext('2d')
-    if (!exportContext) throw new Error('Image exceeds this browser’s canvas limits.')
-    drawComposition(exportContext, image, project.marks, outputSize, type === 'image/jpeg')
     const name = filenameFor(project.name)
-    const blob = await toImageBlob(exportCanvas, type)
+    const blob = await renderImage(image, project.marks, outputSize, type)
     download(blob, `${name}.${blob.type === 'image/jpeg' ? 'jpg' : 'png'}`)
     exportDialog.close()
     notify('Image downloaded')

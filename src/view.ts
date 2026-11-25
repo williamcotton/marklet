@@ -38,7 +38,7 @@ export const editorMarkup = `
             <h1><input id="project-name" aria-label="Project name" maxlength="100" value="Untitled project" size="16" disabled></h1>
             <button type="button" class="rename-button" id="rename-project" aria-label="Rename project" title="Rename project" disabled>${icon('pen')}</button>
           </div>
-          <div class="image-info">${icon('fileImage')}<span id="image-name">No image loaded</span><span id="sample-badge" class="sample-badge" hidden>Example project</span></div>
+          <div class="image-info">${icon('fileImage')}<span id="image-name">No image loaded</span><span id="sample-badge" class="sample-badge" hidden>Example project</span><button type="button" id="source-details" disabled>Source details</button></div>
         </div>
         <button class="button button-outline upload-button" id="upload-image" type="button">${icon('upload')}<span>Upload image</span></button>
       </div>
@@ -61,7 +61,7 @@ export const editorMarkup = `
             <button class="button button-outline" id="empty-upload" type="button" hidden>${icon('upload')}<span>Upload image</span></button>
           </div>
         </div>
-        <div class="drop-overlay" id="drop-overlay" hidden><div>${icon('upload')}<strong>Drop to open</strong><span>Image or Marklet project</span></div></div>
+        <div class="drop-overlay" id="drop-overlay" hidden><div>${icon('upload')}<strong>Drop to open</strong><span>Image or Evidence Works document</span></div></div>
       </div>
 
       <footer class="workspace-footer">
@@ -120,8 +120,20 @@ export const editorMarkup = `
   </main>
 
   <input id="image-input" type="file" accept="image/*" hidden>
-  <input id="project-input" type="file" accept=".marklet,.json,application/json" hidden>
+  <input id="project-input" type="file" accept=".marklet,.webstamp,.juxtapose" hidden>
   <output id="toast" class="toast" role="status" hidden></output>
+
+  <dialog id="source-dialog" aria-labelledby="source-title">
+    <div class="dialog-heading"><h2 id="source-title">Source details</h2><button class="icon-button" type="button" data-close aria-label="Close">${icon('x')}</button></div>
+    <dl id="source-summary"></dl>
+    <form id="source-form">
+      <label for="source-description">Source description</label>
+      <textarea id="source-description" rows="3" maxlength="1000"></textarea>
+      <label for="source-production">Production identifier</label>
+      <input id="source-production" type="text" maxlength="200">
+      <div class="dialog-actions"><button class="button button-primary" type="submit">Save details</button></div>
+    </form>
+  </dialog>
 
   <dialog id="text-dialog" aria-labelledby="text-title">
     <form id="text-form" method="dialog">

@@ -4,6 +4,9 @@ import { pathToFileURL } from 'node:url'
 import { installMenu } from './menu.js'
 
 const editorUrl = 'marklet://app/'
+app.setName('Marklet')
+app.setAppUserModelId('com.williamcotton.marklet')
+if (process.platform === 'linux') app.setDesktopName('com.williamcotton.marklet.desktop')
 const contentSecurityPolicy = [
   "default-src 'self'",
   "img-src 'self' data: blob:",

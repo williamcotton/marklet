@@ -1,5 +1,5 @@
 import type { CalloutMark } from './annotations'
-import { asDataUrl, toImageBlob, type Project } from './project'
+import { imageProject, toImageBlob, type Project } from './project'
 
 const program = [
   "import { round } from './math'",
@@ -98,6 +98,6 @@ export async function createDemo(): Promise<Project> {
     callout: { variant: 'shaded', magnification: 1.5, position: { x: 694, y: 443 } },
     text: '',
   }
-  const imageSrc = await asDataUrl(await toImageBlob(canvas, 'image/png'))
-  return { name: 'Sensor readings', imageName: 'readings.ts.png', imageSrc, marks: [sample] }
+  const project = await imageProject(await toImageBlob(canvas, 'image/png'), 'Sensor readings', 'readings.ts.png')
+  return { ...project, marks: [sample] }
 }

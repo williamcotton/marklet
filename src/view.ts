@@ -124,39 +124,46 @@ export const editorMarkup = `
   <output id="toast" class="toast" role="status" hidden></output>
 
   <dialog id="source-dialog" aria-labelledby="source-title">
-    <div class="dialog-heading"><h2 id="source-title">Source details</h2><button class="icon-button" type="button" data-close aria-label="Close">${icon('x')}</button></div>
-    <dl id="source-summary"></dl>
+    <div class="dialog-heading"><h2 id="source-title">Source details</h2><button class="icon-button" type="button" data-close aria-label="Close dialog">${icon('x')}</button></div>
+    <dl class="dialog-body" id="source-summary"></dl>
     <form id="source-form">
-      <label for="source-description">Source description</label>
-      <textarea id="source-description" rows="3" maxlength="1000"></textarea>
-      <label for="source-production">Production identifier</label>
-      <input id="source-production" type="text" maxlength="200">
-      <div class="dialog-actions"><button class="button button-primary" type="submit">Save details</button></div>
+      <div class="dialog-body">
+        <label for="source-description">Source description</label>
+        <textarea id="source-description" rows="3" maxlength="1000"></textarea>
+        <label for="source-production">Production identifier</label>
+        <input id="source-production" type="text" maxlength="200">
+      </div>
+      <div class="dialog-actions"><button class="button button-outline" type="button" data-close>Cancel</button><button class="button button-primary" type="submit">Save details</button></div>
     </form>
   </dialog>
 
   <dialog id="text-dialog" aria-labelledby="text-title">
     <form id="text-form" method="dialog">
-      <div class="dialog-heading"><h2 id="text-title">Add text</h2><button class="icon-button" type="button" data-close aria-label="Close">${icon('x')}</button></div>
-      <label for="annotation-text">Annotation</label>
-      <textarea id="annotation-text" placeholder="Enter a note…" maxlength="1500" rows="4" required></textarea>
+      <div class="dialog-heading"><h2 id="text-title">Add text</h2><button class="icon-button" type="button" data-close aria-label="Close dialog">${icon('x')}</button></div>
+      <div class="dialog-body">
+        <label for="annotation-text">Annotation</label>
+        <textarea id="annotation-text" placeholder="Enter a note…" maxlength="1500" rows="4" required></textarea>
+      </div>
       <div class="dialog-actions"><button class="button button-outline" type="button" data-close>Cancel</button><button id="text-submit" class="button button-primary" type="submit">Add text</button></div>
     </form>
   </dialog>
 
   <dialog id="export-dialog" aria-labelledby="export-title">
     <form id="export-form" method="dialog">
-      <div class="dialog-heading"><h2 id="export-title">Export image</h2><button class="icon-button" type="button" data-close aria-label="Close">${icon('x')}</button></div>
-      <p id="export-size"></p>
-      <label for="export-format">Format</label>
-      <div class="select-wrap"><select id="export-format"><option value="image/png">PNG</option><option value="image/jpeg">JPEG</option></select>${icon('chevron')}</div>
+      <div class="dialog-heading"><h2 id="export-title">Export image</h2><button class="icon-button" type="button" data-close aria-label="Close dialog">${icon('x')}</button></div>
+      <div class="dialog-body">
+        <p id="export-size"></p>
+        <label for="export-format">Format</label>
+        <div class="select-wrap"><select id="export-format" autofocus><option value="image/png">PNG</option><option value="image/jpeg">JPEG</option></select>${icon('chevron')}</div>
+        <p id="export-error" role="alert" hidden></p>
+      </div>
       <div class="dialog-actions"><button class="button button-outline" type="button" data-close>Cancel</button><button id="export-submit" class="button button-primary" type="submit">${icon('download')} Download image</button></div>
     </form>
   </dialog>
 
   <dialog id="shortcuts-dialog" aria-labelledby="shortcuts-title">
-    <div class="dialog-heading"><h2 id="shortcuts-title">Keyboard shortcuts</h2><button class="icon-button" type="button" data-close aria-label="Close">${icon('x')}</button></div>
-    <div class="shortcuts-list">
+    <div class="dialog-heading"><h2 id="shortcuts-title">Keyboard shortcuts</h2><button class="icon-button" type="button" data-close aria-label="Close dialog">${icon('x')}</button></div>
+    <div class="dialog-body shortcuts-list">
       ${shortcuts}
       <div><span>Reorder with layer handle focused</span><kbd>↑ / ↓</kbd></div>
       <div><span>Undo</span><kbd>Ctrl / ⌘ + Z</kbd></div>

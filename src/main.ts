@@ -1,4 +1,5 @@
 import '@fontsource-variable/dm-sans'
+import '@fontsource-variable/inter'
 import { fitsDisplayImage, imageLimits } from '@evidenceworks/document'
 import './style.css'
 import { contains, defaultStyles, drawMark, drawSelection, hitsMark, moveMark, resizeHandles, resizeMark, toolNames, type Mark, type MarkTool, type Point, type ResizeHandle, type Style, type Tool } from './annotations'
@@ -579,6 +580,7 @@ async function saveProject() {
 function openExport() {
   if (!image) return
   element('export-size').textContent = `${outputSize.x} × ${outputSize.y} px · Includes all annotations`
+  element('export-error').hidden = true
   exportDialog.showModal()
 }
 
@@ -636,6 +638,8 @@ async function exportImage(event: Event) {
   if (!project || !image) return
   const button = element<HTMLButtonElement>('export-submit')
   const type = element<HTMLSelectElement>('export-format').value
+  const error = element('export-error')
+  error.hidden = true
   button.disabled = true
   try {
     const name = filenameFor(project.name)
@@ -644,7 +648,8 @@ async function exportImage(event: Event) {
     exportDialog.close()
     notify('Image downloaded')
   } catch {
-    notify('Could not export at these dimensions.')
+    error.textContent = 'Could not export at these dimensions.'
+    error.hidden = false
   } finally {
     button.disabled = false
   }

@@ -19,6 +19,8 @@ See the [latest release](https://github.com/williamcotton/marklet/releases/lates
 
 ![Marklet showing a code review with a box, yellow highlight, arrow, and text note](docs/screenshots/review-markup.png)
 
+![Marklet showing PNG and JPEG export options for an annotated image](docs/screenshots/export-image.png)
+
 ## Usage
 
 Open an image, press **C**, and drag a box around the code you want to magnify. The **3D** callout style links the enlarged inset to the original lines with a four-corner fade.

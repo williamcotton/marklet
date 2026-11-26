@@ -148,7 +148,7 @@ export const editorMarkup = `
     <form id="export-form" method="dialog">
       <div class="dialog-heading"><h2 id="export-title">Export image</h2><button class="icon-button" type="button" data-close aria-label="Close">${icon('x')}</button></div>
       <p id="export-size"></p>
-      <label for="export-format">File format</label>
+      <label for="export-format">Format</label>
       <div class="select-wrap"><select id="export-format"><option value="image/png">PNG</option><option value="image/jpeg">JPEG</option></select>${icon('chevron')}</div>
       <div class="dialog-actions"><button class="button button-outline" type="button" data-close>Cancel</button><button id="export-submit" class="button button-primary" type="submit">${icon('download')} Download image</button></div>
     </form>

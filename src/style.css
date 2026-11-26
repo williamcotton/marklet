@@ -253,6 +253,7 @@ dialog::backdrop { background: #28251e64; }
 .dialog-heading h2 { font-size: 1.3rem; letter-spacing: -.025em; }
 dialog p { color: var(--muted); margin: 0 0 16px; font-size: .875rem; }
 dialog label { display: block; font-size: .875rem; font-weight: 650; margin-bottom: 7px; }
+#export-dialog label { font-size: .8125rem; }
 dialog textarea, dialog select, dialog input { background: var(--white); width: 100%; border: 1px solid #ded8ce; border-radius: 7px; color: inherit; padding: 9px 10px; }
 #source-summary { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; font-size: .875rem; }
 #source-summary dt { font-weight: 600; }
